@@ -1,0 +1,29 @@
+# dsh-compaction-prep mount template (bypass-compaction suite over billion-context-dsh).
+# Insert into the profile cordis.patch.yml — disable the built-in compactor and
+# mount the ACP engine (billion-context-dsh) + this suite.
+- id: compaction-basic
+  disabled: true
+- insert:
+    - id: compaction-acp
+      name: billion-context-dsh
+    - id: compaction-prep-suite
+      name: dsh-compaction-prep
+      config:
+        enable: true
+        l1_preview_limit: 2048
+        l2_snip_after_turns: 5
+        l2_query_tools:
+          - search_context
+          - read_file
+          - glob
+          - grep
+          - web_search
+          - web_fetch
+          - ls
+          - read
+          - browse*
+          - session*
+        l3_micro_max_range: 50
+        l3_cache_aware: true
+        acp_rule: false
+        context_store_dir: ~/.dsh/context-store
