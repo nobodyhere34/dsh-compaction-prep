@@ -7,11 +7,15 @@
 ## 联合安装（与 billion-context-dsh）
 
 ```bash
+# 0) 先为 BCD 的精确版本授予兼容豁免（BCD 0.2.27 的 peer 声明早于当前 0.2.1 线，插件管理器会连同依赖一起做兼容检查）
+dsh plugin --profile web allow-version billion-context-dsh@0.2.27 --dsh-version 0.2.1-rc.2 --accept-risk
+#    把最后的 0.2.1-rc.2 换成你的 dsh 运行时版本（dsh --version）
+
 # 方式 A：GitHub tag（推荐；lib 已提交，无需现场构建）
-dsh plugin --profile web add 'github:nobodyhere34/dsh-compaction-prep#v0.1.0'
+dsh plugin --profile web add 'github:nobodyhere34/dsh-compaction-prep#v0.1.1'
 
 # 方式 B：Release tgz
-dsh plugin --profile web add 'https://github.com/nobodyhere34/dsh-compaction-prep/releases/download/v0.1.0/dsh-compaction-prep-0.1.0.tgz'
+dsh plugin --profile web add 'https://github.com/nobodyhere34/dsh-compaction-prep/releases/download/v0.1.1/dsh-compaction-prep-0.1.1.tgz'
 ```
 
 - 本插件的 bundle patch 会禁用内置 `compaction-basic`，并插入 `compaction-acp`（`billion-context-dsh`）+ `compaction-prep-suite`（本插件，含 config）。
