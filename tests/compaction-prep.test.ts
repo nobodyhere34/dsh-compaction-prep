@@ -366,13 +366,19 @@ test('P0-5: passes the range to the engine compress tool (delegation smoke, stub
   const session = buildSession('micro-delegate')
   addUser(session, 'q1')
   addAssistant(session, 'a1')
+  // The real cordis Context throws on undeclared service property access;
+  // the adapter reads compaction through ctx.get, so the stub exposes get
+  // only — with the billion-context-dsh >= 0.2 shape (modelContextLimit as
+  // a live getter on engine.env, not on the instance).
   const fakeCtx = {
-    compaction: {
-      kernel: {},
-      store: new AcpStateStore(),
-      modelContextLimit: 128000,
-      compressCallIdsToHide: new Set<string>(),
-    },
+    get: (name: string) => name === 'compaction'
+      ? {
+          kernel: {},
+          store: new AcpStateStore(),
+          env: { modelContextLimit: 128000 },
+          compressCallIdsToHide: new Set<string>(),
+        }
+      : undefined,
   } as unknown as Context
   const bindings = makeBindings({ config: { l3_cache_aware: true }, ctx: fakeCtx })
   const tool = toolsOf(bindings).get('microcompact')!
@@ -381,6 +387,29 @@ test('P0-5: passes the range to the engine compress tool (delegation smoke, stub
   const text = (result as { text: string }).text
   assert.ok(text.includes('[Rejected: microcompact failed inside the ACP engine: '), 'reached the engine compress tool')
   assert.equal(bindings.microPairs.get(String(session.id))?.has(callId), undefined, 'failed attempt not queued for hiding')
+})
+
+// ---------------------------------------------------------------------------
+// P0-5b — engineOf contract: get()-based lookup, both knob placements, no throw
+// ---------------------------------------------------------------------------
+
+test('P0-5b: engineOf accepts instance and env modelContextLimit shapes via ctx.get', async () => {
+  const { engineOf } = await import('../src/adapter.js')
+  const kernel = {}
+  const store = new AcpStateStore()
+  const viaInstance = engineOf({ get: () => ({ kernel, store, modelContextLimit: 128000 }) } as unknown as Context)
+  assert.ok(viaInstance && viaInstance.modelContextLimit === 128000, 'legacy instance-level knob passes')
+  const viaEnv = engineOf({ get: () => ({ kernel, store, env: { modelContextLimit: 524288 } }) } as unknown as Context)
+  assert.ok(viaEnv && viaEnv.modelContextLimit === 524288, 'bcd >= 0.2 env-level knob passes')
+  // A cordis Context throws on property access for names outside inject; the
+  // adapter must read through get() and never touch the property.
+  const throwingCtx = {
+    get: (name: string) => name === 'compaction' ? { kernel, store, env: { modelContextLimit: 128000 } } : undefined,
+  }
+  Object.defineProperty(throwingCtx, 'compaction', { get() { throw new Error('cannot get property "compaction" without inject') } })
+  assert.ok(engineOf(throwingCtx as unknown as Context), 'property-throwing ctx is answered through get()')
+  assert.equal(engineOf({ get: () => undefined } as unknown as Context), null, 'unmounted compaction is null')
+  assert.equal(engineOf({} as unknown as Context), null, 'ctx without get is null, not a throw')
 })
 
 // ---------------------------------------------------------------------------

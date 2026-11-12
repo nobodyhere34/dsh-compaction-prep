@@ -12,9 +12,7 @@ export interface AcpEngineHandle {
     readonly kernel: object;
     readonly store: object;
     readonly modelContextLimit: number;
-    readonly windowFor?: (payload: {
-        agent?: unknown;
-    }) => Promise<{
+    readonly windowFor?: (agent: unknown) => Promise<{
         limit: number;
     }>;
     readonly compressCallIdsToHide?: ReadonlySet<string>;
@@ -22,7 +20,7 @@ export interface AcpEngineHandle {
     readonly preset?: string | null;
 }
 /**
- * Probe ctx.compaction for a live ACP engine without importing it.
+ * Probe the compaction service for a live ACP engine without importing it.
  * Returns null when either no compactor is mounted or the mounted one is not
  * an ACP engine (e.g. the stock compaction-basic service).
  */

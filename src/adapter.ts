@@ -14,21 +14,24 @@ export interface AcpEngineHandle {
   readonly kernel: object
   readonly store: object
   readonly modelContextLimit: number
-  readonly windowFor?: (payload: { agent?: unknown }) => Promise<{ limit: number }>
+  readonly windowFor?: (agent: unknown) => Promise<{ limit: number }>
   readonly compressCallIdsToHide?: ReadonlySet<string>
   readonly prompts?: object
   readonly preset?: string | null
 }
 
 /**
- * Probe ctx.compaction for a live ACP engine without importing it.
+ * Probe the compaction service for a live ACP engine without importing it.
  * Returns null when either no compactor is mounted or the mounted one is not
  * an ACP engine (e.g. the stock compaction-basic service).
  */
 export function engineOf(ctx: Context): AcpEngineHandle | null {
-  // ctx.compaction is the live engine service; its declared type widens across
-  // host lines, so this adapter probes the public duck surface only.
-  const probe = ctx as { compaction?: {
+  // Read the service through the dynamic get() rather than a ctx property:
+  // cordis throws on property access for names the fiber did not declare in
+  // inject, and this suite injects only 'tools'. get() answers undefined for
+  // an unmounted name, keeping the null contract.
+  const found = (ctx as { get?: (name: string) => unknown }).get?.('compaction')
+  const engine = found as {
     readonly kernel?: unknown
     readonly store?: unknown
     readonly modelContextLimit?: unknown
@@ -36,17 +39,31 @@ export function engineOf(ctx: Context): AcpEngineHandle | null {
     readonly compressCallIdsToHide?: unknown
     readonly prompts?: unknown
     readonly preset?: unknown
-  } }
-  const engine = probe.compaction
+    readonly env?: {
+      readonly modelContextLimit?: unknown
+      readonly windowFor?: unknown
+    }
+  } | undefined
   if (!engine || typeof engine !== 'object') return null
   const kernel = engine.kernel
   const store = engine.store
-  const modelContextLimit = engine.modelContextLimit
+  // billion-context-dsh >= 0.2 keeps the settings-exposed knobs as live
+  // getters on engine.env, not on the instance; read the instance first and
+  // fall back to env so both shapes pass. The env getter hot-reads the
+  // settings source, so the value never goes stale behind this snapshot —
+  // windowFor (when present) supplies the per-request live window downstream.
+  const modelContextLimit = typeof engine.modelContextLimit === 'number'
+    ? engine.modelContextLimit
+    : engine.env?.modelContextLimit
   if (typeof modelContextLimit !== 'number' || modelContextLimit <= 0) return null
   if (!kernel || typeof kernel !== 'object' || !store || typeof store !== 'object') return null
-  const windowFor = typeof engine.windowFor === 'function'
-    ? engine.windowFor as AcpEngineHandle['windowFor']
-    : undefined
+  // Prefer the engine's own bound env.windowFor closure; a raw class method
+  // taken off the instance would lose its this binding when forwarded.
+  const windowFor = typeof engine.env?.windowFor === 'function'
+    ? engine.env.windowFor as AcpEngineHandle['windowFor']
+    : typeof engine.windowFor === 'function'
+      ? (engine.windowFor as (agent: unknown) => Promise<{ limit: number }>).bind(engine)
+      : undefined
   const compressCallIdsToHide = engine.compressCallIdsToHide instanceof Set
     ? engine.compressCallIdsToHide as ReadonlySet<string>
     : undefined
